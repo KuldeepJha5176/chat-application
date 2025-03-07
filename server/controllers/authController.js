@@ -8,7 +8,7 @@ const signupBody = zod.object({
   email: zod.string().email().optional(),
   password: zod.string().min(6).max(20).optional(),
 });
-exports.signup = async (req, res) => {
+ const signup = async (req, res) => {
   try {
     const { success } = signupBody.safeParse(req.body);
     if (!success) {
@@ -65,7 +65,7 @@ const signinBody = zod.object({
   username: zod.string().min(3).max(20).optional(),
   password: zod.string().min(6).max(20).optional(),
 });
-exports.signin = async (req, res) => {
+const signin = async (req, res) => {
   try {
     const { success } = signinBody.safeParse(req.body);
     if (!success) {
@@ -110,7 +110,7 @@ exports.signin = async (req, res) => {
   }
 };
 
-exports.logout = async (req, res) => {
+const logout = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
     if (!user) {
@@ -129,7 +129,7 @@ exports.logout = async (req, res) => {
   }
 };
 // Get current authenticated user
-exports.getCurrentUser = async (req, res) => {
+const getCurrentUser = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
     if (!user) {
@@ -149,3 +149,5 @@ exports.getCurrentUser = async (req, res) => {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
+
+module.exports = {signup, signin, logout, getCurrentUser};

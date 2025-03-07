@@ -3,7 +3,7 @@ const Conversation = require("../models/conversation");
 const Chatbot = require("../models/chatbot");
 
 //get user conversations
-exports.getUserConversations = async (req, res) => {
+const getUserConversations = async (req, res) => {
     try {
         const userId = req.user._id;
         const conversations = await Conversation.find({ participants:  { $in: [userId] } }).populate('participants', '_id username profilePicture isOnline lastSeen').populate('chatbot', '_id username profilePicture isOnline lastSeen').sort({ updatedAt: -1 });
@@ -28,7 +28,7 @@ exports.getUserConversations = async (req, res) => {
 };
 // Get single conversation
 
-exports.getConversation = async (req, res) => {
+const getConversation = async (req, res) => {
     try {  
         const conversationId = req.params.conversationId;
         const userId = req.user._id;
@@ -64,7 +64,7 @@ exports.getConversation = async (req, res) => {
 };
 
 // Create a new conversation
-exports.createConversation = async (req, res) => {
+const createConversation = async (req, res) => {
     try {
         const { receiverId } = req.body;
         const { senderId } = req.user.id;
@@ -133,7 +133,7 @@ exports.createConversation = async (req, res) => {
       };
 
       // Get messages in a conversation
-        exports.getMessages = async (req, res) => {
+const getMessages = async (req, res) => {
             try {
                 const conversationId = req.params.conversationId;
                 const userId = req.user._id;
@@ -208,7 +208,7 @@ exports.createConversation = async (req, res) => {
 };
 
 // Send a message
-exports.sendMessage = async (req, res) => {
+const sendMessage = async (req, res) => {
     try {
         const { conversationId, content, mediaUrl } = req.body;
         const senderId = req.user.id;
@@ -267,7 +267,7 @@ exports.sendMessage = async (req, res) => {
     };
 
     // Delete a message (mark as deleted)
-    exports.deleteMessage = async (req, res) => {
+const deleteMessage = async (req, res) => {
         try {
             const { messageId } = req.params;
             const userId = req.user.id;
@@ -297,7 +297,7 @@ exports.sendMessage = async (req, res) => {
     };
 
   // Get unread message count
-  exports.getUnreadCount = async (req, res) => {
+const getUnreadCount = async (req, res) => {
     try {
       const userId = req.user.id;
       
@@ -324,6 +324,7 @@ exports.sendMessage = async (req, res) => {
     }
   };
 
+  module .exports = {getUserConversations, getConversation, createConversation, getMessages, sendMessage, deleteMessage, getUnreadCount};
 
 
 

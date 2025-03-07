@@ -13,4 +13,4 @@ router.get('/search', userController.searchUsers);
 router.get('/contacts', userController.getContacts);
 
 
-exports.userRouter = router;
+module.exports = router;

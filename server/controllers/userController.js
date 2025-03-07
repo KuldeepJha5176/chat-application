@@ -2,7 +2,7 @@ const User = require("../models/user");
 const Conversation = require("../models/conversation");
 
 //get user profile
-exports.getUserProfile = async (req, res) => {
+const getUserProfile = async (req, res) => {
     try {
         const user = await User.findById(req.user._id);
         if (!user) {
@@ -23,7 +23,7 @@ exports.getUserProfile = async (req, res) => {
     }
 };
 
-exports.updateProfile = async (req, res) => {
+const updateProfile = async (req, res) => {
     try {
       const { username, bio, profilePicture } = req.body;
       const userId = req.user.id;
@@ -57,7 +57,7 @@ exports.updateProfile = async (req, res) => {
   };
 
   //search users by username
-  exports.searchUsers = async (req, res) => {
+ const searchUsers = async (req, res) => {
     try {
       const { query } = req.query;
       const userId = req.user.id;
@@ -74,7 +74,7 @@ exports.updateProfile = async (req, res) => {
     }
   };
   // Get user contacts/recent chats
-  exports.getContacts = async (req, res) => {
+const getContacts = async (req, res) => {
     try {
         const userId = req.user._id;
         //find all conversation involving current user
@@ -99,4 +99,6 @@ exports.updateProfile = async (req, res) => {
     } catch (error) {
         res.status(500).json({ message: 'Server error', error: error.message });
     }
-};  
+}; 
+
+module.exports = {getUserProfile, updateProfile, searchUsers, getContacts};
