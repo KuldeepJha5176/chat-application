@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 const Schema = mongoose.Schema;
 
 const userSchema = new Schema({
-    Username: {
+    username: {
         type: String,
         required: true,
     },
@@ -19,6 +19,7 @@ const userSchema = new Schema({
     role: {
         type: String,
         required: true,
+        default: "user",
     },
     profilePic: {
         type: String,
@@ -30,7 +31,7 @@ const userSchema = new Schema({
     },
     bio: {
         type: String,
-        default: "I am a chatbot",
+        default: "I am a web developer",
     },
     lastSeen: {
         type: Date,

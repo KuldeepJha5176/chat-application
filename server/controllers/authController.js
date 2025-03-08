@@ -33,7 +33,7 @@ const signupBody = zod.object({
       username: req.body.username,
       email: req.body.email,
       password: hashedPassword,
-      profilePicture: `https://ui-avatars.com/api/?name=${username}&background=random`,
+      profilePicture: `https://ui-avatars.com/api/?name=${req.body.username}&background=random`,
       isOnline: true,
       lastSeen: new Date(),
     });
