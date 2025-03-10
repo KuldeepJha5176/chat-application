@@ -1,27 +1,33 @@
-const { JWT_SECRET } = require("./../secret");
+
 const jwt = require("jsonwebtoken");
 
 const authMiddleware = (req, res, next) => {
-    const authHeader = req.headers.authorization;
-
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(403).json({});
+    console.log('Auth header:', req.headers.authorization);
+    
+    const token = req.headers.authorization;
+    if (!token) {
+      console.log('No token provided');
+      return res.status(403).json({});
     }
-
-    const token = authHeader.split(' ')[1];
-
+    
     try {
-        const decoded = jwt.verify(token, JWT_SECRET);
-        if (decoded.userId) {
-        req.userId = decoded.userId;
-        
+      // If you're using "Bearer " prefix, remove it
+      const actualToken = token.startsWith('Bearer ') ? token.slice(7) : token;
+      console.log('Attempting to verify token');
+      
+      const decoded = jwt.verify(actualToken, process.env.JWT_SECRET);
+      console.log('Decoded token:', decoded);
+      
+      if (decoded.id) {
+        req.user = { _id: decoded.id, id: decoded.id };
         next();
-        } else {
-            return res.status(401).json({});
-        }   
+      } else {
+        console.log('Token missing id field');
+        return res.status(401).json({});
+      }
     } catch (err) {
-        return res.status(403).json({});
+      console.log('Token verification failed:', err.message);
+      return res.status(403).json({});
     }
-};
-
+  };
 module.exports = authMiddleware;

@@ -4,66 +4,59 @@ const User = require("../models/user");
 const zod = require("zod");
 
 const signupBody = zod.object({
-  username: zod.string().min(3).max(20).optional(),
-  email: zod.string().email().optional(),
-  password: zod.string().min(6).max(20).optional(),
+  username: zod.string().min(3).max(20),
+  email: zod.string().email(),
+  password: zod.string().min(6).max(20),
 });
- const signup = async (req, res) => {
+const signup = async (req, res) => {
   try {
-    const { success } = signupBody.safeParse(req.body);
-    if (!success) {
-      return res.status(411).json({
-        message: "Invalid request body",
-      });
+    const parsedBody = signupBody.safeParse(req.body);
+    if (!parsedBody.success) {
+      return res.status(411).json({ message: "Invalid request body" });
     }
-    const existingUser = await User.findOne({ username: req.body.username });
+
+    const { username, email, password } = req.body;
+
+    // Check if username or email already exists
+    const existingUser = await User.findOne({ $or: [{ username }, { email }] });
     if (existingUser) {
-      return res.status(409).json({
-        message: "User already exists",
-      });
+      return res.status(409).json({ message: "Username or Email already exists" });
     }
-    const existingEmail = await User.findOne({ email: req.body.email });
-    if (existingEmail) {
-      return res.status(409).json({
-        message: "Email already exists",
-      });
-    }
-    const hashedPassword = await bcrypt.hash(req.body.password, 10);
+
+    // Hash password and create user
+    const hashedPassword = await bcrypt.hash(password, 10);
     const user = await User.create({
-      username: req.body.username,
-      email: req.body.email,
+      username,
+      email,
       password: hashedPassword,
-      profilePicture: `https://ui-avatars.com/api/?name=${req.body.username}&background=random`,
+      profilePicture: `https://ui-avatars.com/api/?name=${username}&background=random`,
       isOnline: true,
       lastSeen: new Date(),
     });
-    res.status(201).json({
-      message: "User created successfully",
-      user: user,
-    });
-    const savedUser = await newUser.save();
 
     // Generate token
-    const token = jwt.sign({ id: savedUser._id }, process.env.JWT_SECRET, {
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
       expiresIn: "7d",
     });
 
-    res.status(201).json({
+    return res.status(201).json({
+      message: "User created successfully",
       token,
       user: {
-        id: savedUser._id,
-        username: savedUser.username,
-        email: savedUser.email,
-        profilePicture: savedUser.profilePicture,
+        id: user._id,
+        username: user.username,
+        email: user.email,
+        profilePicture: user.profilePicture,
       },
     });
+
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    return res.status(500).json({ message: "Server error", error: error.message });
   }
 };
 const signinBody = zod.object({
-  username: zod.string().min(3).max(20).optional(),
-  password: zod.string().min(6).max(20).optional(),
+  username: zod.string().min(3).max(20),
+  password: zod.string().min(6).max(20),
 });
 const signin = async (req, res) => {
   try {
@@ -150,4 +143,9 @@ const getCurrentUser = async (req, res) => {
   }
 };
 
-module.exports = {signup, signin, logout, getCurrentUser};
+module.exports = { 
+  signup: signup,
+  signin: signin,
+  getCurrentUser: getCurrentUser,
+  logout: logout
+};

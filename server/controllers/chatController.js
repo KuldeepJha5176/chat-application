@@ -1,6 +1,7 @@
 const User = require("../models/user");
 const Conversation = require("../models/conversation");
 const Chatbot = require("../models/chatbot");
+const Message = require("../models/message");
 
 //get user conversations
 const getUserConversations = async (req, res) => {
@@ -67,7 +68,7 @@ const getConversation = async (req, res) => {
 const createConversation = async (req, res) => {
     try {
         const { receiverId } = req.body;
-        const { senderId } = req.user.id;
+        const senderId = req.user.id;
          // Validate receiverId
          if (!receiverId) {
             return res.status(400).json({
@@ -157,7 +158,7 @@ const getMessages = async (req, res) => {
        
        const skip = (parseInt(page) - 1) * parseInt(limit);
 
-       const messages = await conversation.find({conversationId: conversationId})
+       const messages = await Message.find({conversationId: conversationId})
        .sort({createdAt: -1}).
        skip(skip)
        .limit(parseInt(limit))
