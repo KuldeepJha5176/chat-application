@@ -5,12 +5,12 @@ const conversationSchema = new Schema({
     user: {
         type: Schema.Types.ObjectId,
         ref: "User",
-        required: true,
+        required: false,
     },
     chatbot: {
         type: Schema.Types.ObjectId,
         ref: "User",
-        required: true,
+        required: false,
     },
     participants: [
         {
@@ -28,11 +28,11 @@ const conversationSchema = new Schema({
         sender: {
             type: Schema.Types.ObjectId,
             ref: "User",
-            required: true,
+            required: false,
         },
         message: {
             type: String,
-            required: true,
+            required: false,
         },
     },
     createdAt: {

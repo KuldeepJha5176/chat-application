@@ -47,6 +47,10 @@ const getConversation = async (req, res) => {
                 message: "You are not a participant in this conversation",
             });
         }
+        const otherParticipant = conversation.participants.find(
+          p => p._id.toString() !== userId
+          );
+          
          // Format to include other participant details
          const formattedConversation = {
             id: conversation._id,
@@ -136,6 +140,7 @@ const createConversation = async (req, res) => {
       // Get messages in a conversation
 const getMessages = async (req, res) => {
             try {
+              console.log("✅ getMessages route hit! Params:", req.params);
                 const conversationId = req.params.conversationId;
                 const userId = req.user._id;
                 const { page = 1, limit = 50 } = req.query;
@@ -204,6 +209,7 @@ const getMessages = async (req, res) => {
       }
     });
   } catch (error) {
+    console.error("❌ Error in getMessages:", error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
@@ -211,12 +217,12 @@ const getMessages = async (req, res) => {
 // Send a message
 const sendMessage = async (req, res) => {
     try {
-        const { conversationId, content, mediaUrl } = req.body;
+        const { conversationId, message, mediaUrl } = req.body;
         const senderId = req.user.id;
 
         //validate  inputs
-        if (!conversationId || (!content && !mediaUrl)) {
-            return res.status(400).json({ message: 'Conversation ID and content/media are required' });
+        if (!conversationId || (!message && !mediaUrl)) {
+            return res.status(400).json({ message: 'Conversation ID and message/media are required' });
           }
 
            // Verify conversation exists and user is part of it
@@ -235,7 +241,7 @@ const sendMessage = async (req, res) => {
             const newMessage = new Message({
                 conversationId,
                 sender: senderId,
-                content: content || '',
+                message: message || '',
                 mediaUrl: mediaUrl || '',
                 read: false,
                 createdAt: new Date(),
@@ -251,7 +257,7 @@ const sendMessage = async (req, res) => {
             //update conversation last message
             conversation.lastMessage = {
                 sender : senderId,
-                content: content || '[Message]',
+                message: message || '[Message]',
                 mediaUrl: mediaUrl || '',
                 createdAt: new Date(),
                 
@@ -287,7 +293,7 @@ const deleteMessage = async (req, res) => {
         }
         // Mark as deleted rather than removing completely
         message.deleted = true;
-        message.content = '[Message deleted]';
+        message.message = '[Message deleted]';
         message.mediaUrl = '';
         await message.save();
 
