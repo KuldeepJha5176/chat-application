@@ -1,242 +1,198 @@
 // server/config/socket.js
 
-const WebSocket = require('ws');
+const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
-const url = require('url');
-const User = require('../models/user'); 
+const User = require('../models/user');
 const Conversation = require('../models/conversation');
 const Message = require('../models/message');
-    
 
-// Initialize WebSocket server
 const setupWebSocket = (server) => {
-  const wss = new WebSocket.Server({ 
-    server,
-    verifyClient: async (info, callback) => {
-      try {
-        // Parse the token from query string
-        const { query } = url.parse(info.req.url, true);
-        
-        if (!query.token) {
-          return callback(false, 401, 'Unauthorized');
-        }
-        
-        // Verify token
-        const decoded = jwt.verify(query.token, process.env.JWT_SECRET);
-        const user = await User.findById(decoded.id).select('-password');
-        
-        if (!user) {
-          return callback(false, 401, 'User not found');
-        }
-        
-        // Attach user to request for later use
-        info.req.user = user;
-        return callback(true);
-      } catch (error) {
-        console.error('WebSocket authentication error:', error);
-        return callback(false, 401, 'Authentication failed');
-      }
+  const io = new Server(server, {
+    cors: {
+      origin: process.env.NODE_ENV === 'production'
+        ? process.env.FRONTEND_URL
+        : ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'],
+      credentials: true
     }
   });
 
-  // Track online users - Map userId to WebSocket connection
+  // Track online users - Map userId to socket id and user data
   const onlineUsers = new Map();
-  
-  // Track which conversations each client is subscribed to
-  const clientSubscriptions = new Map();
 
-  // Broadcast to specific users or conversations
-  const broadcast = (data, clients) => {
-    if (!clients || !clients.length) return;
-    
-    const message = JSON.stringify(data);
-    clients.forEach(client => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(message);
+  // Authentication middleware
+  io.use(async (socket, next) => {
+    try {
+      const token = socket.handshake.auth.token;
+      if (!token) {
+        return next(new Error('Authentication error'));
       }
-    });
+
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const user = await User.findById(decoded.id).select('-password');
+
+      if (!user) {
+        return next(new Error('User not found'));
+      }
+
+      socket.user = user;
+      next();
+    } catch (error) {
+      console.error('Socket authentication error:', error);
+      next(new Error('Authentication failed'));
+    }
+  });
+
+  // Get online users list
+  const getOnlineUsersList = async () => {
+    const usersList = [];
+    for (const [userId, socketId] of onlineUsers.entries()) {
+      const user = await User.findById(userId).select('username avatar');
+      if (user) {
+        usersList.push({
+          id: userId,
+          username: user.username,
+          avatar: user.avatar
+        });
+      }
+    }
+    return usersList;
   };
 
-  // Get all clients subscribed to a conversation
-  const getConversationClients = (conversationId) => {
-    const clients = [];
-    clientSubscriptions.forEach((subscriptions, client) => {
-      if (subscriptions.includes(conversationId)) {
-        clients.push(client);
-      }
-    });
-    return clients;
-  };
-
-  wss.on('connection', (ws, req) => {
-    const user = req.user;
+  io.on('connection', async (socket) => {
+    const user = socket.user;
     console.log(`User connected: ${user._id}`);
-    
-    // Store user connection
-    onlineUsers.set(user._id.toString(), ws);
-    
-    // Initialize client subscriptions
-    clientSubscriptions.set(ws, []);
-    
-    // Broadcast user online status
-    const statusUpdate = {
-      type: 'userStatus',
-      data: {
-        userId: user._id.toString(),
-        status: 'online'
-      }
-    };
-    
-    broadcast(statusUpdate, Array.from(onlineUsers.values()));
 
-    ws.on('message', async (message) => {
-      try {
-        const data = JSON.parse(message.toString());
-        
-        switch(data.type) {
-          case 'joinConversations':
-            // Add user to conversations for receiving messages
-            if (Array.isArray(data.conversationIds)) {
-              clientSubscriptions.set(ws, data.conversationIds);
-            }
-            break;
-            
-          case 'sendMessage':
-            const { conversationId, content, attachments } = data;
-            
-            // Create and save new message
-            const newMessage = new Message({
-              conversation: conversationId,
-              sender: user._id,
-              content,
-              attachments: attachments || []
-            });
-            
-            await newMessage.save();
-            
-            // Update conversation with last message
-            await Conversation.findByIdAndUpdate(conversationId, {
-              lastMessage: newMessage._id,
-              $inc: { messageCount: 1 }
-            });
-            
-            // Populate sender info before sending to clients
-            const populatedMessage = await Message.findById(newMessage._id)
-              .populate('sender', 'name avatar')
-              .populate('attachments');
-            
-            // Send to all clients subscribed to this conversation
-            const conversationClients = getConversationClients(conversationId);
-            
-            broadcast({
-              type: 'newMessage',
-              data: populatedMessage
-            }, conversationClients);
-            
-            // Send notification to conversation participants
-            const conversation = await Conversation.findById(conversationId)
-              .populate('participants', '_id');
-            
-            conversation.participants.forEach(participant => {
-              const participantId = participant._id.toString();
-              
-              // Skip the sender
-              if (participantId === user._id.toString()) return;
-              
-              // If user is online, send notification
-              const receiverWs = onlineUsers.get(participantId);
-              if (receiverWs && receiverWs.readyState === WebSocket.OPEN) {
-                receiverWs.send(JSON.stringify({
-                  type: 'messageNotification',
-                  data: {
-                    conversationId,
-                    message: populatedMessage
-                  }
-                }));
-              }
-            });
-            break;
-            
-          case 'typing':
-            const typingClients = getConversationClients(data.conversationId);
-            
-            broadcast({
-              type: 'userTyping',
-              data: {
-                userId: user._id,
-                username: user.name,
-                isTyping: data.isTyping,
-                conversationId: data.conversationId
-              }
-            }, typingClients);
-            break;
-            
-          case 'markAsRead':
-            await Message.updateMany(
-              { 
-                _id: { $in: data.messageIds },
-                sender: { $ne: user._id }
-              },
-              { 
-                $addToSet: { readBy: user._id } 
-              }
-            );
-            
-            const readReceiptClients = getConversationClients(data.conversationId);
-            
-            broadcast({
-              type: 'messagesRead',
-              data: {
-                conversationId: data.conversationId,
-                messageIds: data.messageIds,
-                readBy: user._id
-              }
-            }, readReceiptClients);
-            break;
-            
-          default:
-            console.log('Unknown message type:', data.type);
-        }
-      } catch (error) {
-        console.error('Error processing WebSocket message:', error);
-        ws.send(JSON.stringify({
-          type: 'error',
-          message: 'Error processing message'
-        }));
+    // Store user connection
+    onlineUsers.set(user._id.toString(), socket.id);
+
+    // Broadcast user online status
+    io.emit('userStatus', {
+      userId: user._id.toString(),
+      status: 'online'
+    });
+
+    // Handle get online users request
+    socket.on('getOnlineUsers', async () => {
+      const usersList = await getOnlineUsersList();
+      socket.emit('onlineUsers', usersList);
+    });
+
+    // Join conversations
+    socket.on('joinConversations', (conversationIds) => {
+      if (Array.isArray(conversationIds)) {
+        conversationIds.forEach(id => socket.join(id));
       }
     });
 
-    // Handle client disconnection
-    ws.on('close', () => {
+    // Handle new message
+    socket.on('sendMessage', async (data) => {
+      try {
+        const { conversationId, content, attachments } = data;
+
+        // Create and save new message
+        const newMessage = new Message({
+          conversation: conversationId,
+          sender: user._id,
+          content,
+          attachments: attachments || []
+        });
+
+        await newMessage.save();
+
+        // Update conversation with last message
+        await Conversation.findByIdAndUpdate(conversationId, {
+          lastMessage: newMessage._id,
+          $inc: { messageCount: 1 }
+        });
+
+        // Populate sender info before sending to clients
+        const populatedMessage = await Message.findById(newMessage._id)
+          .populate('sender', 'username avatar')
+          .populate('attachments');
+
+        // Send to all clients in the conversation
+        io.to(conversationId).emit('newMessage', populatedMessage);
+
+        // Send notification to conversation participants
+        const conversation = await Conversation.findById(conversationId)
+          .populate('participants', '_id');
+
+        conversation.participants.forEach(participant => {
+          const participantId = participant._id.toString();
+          if (participantId === user._id.toString()) return;
+
+          const receiverSocketId = onlineUsers.get(participantId);
+          if (receiverSocketId) {
+            io.to(receiverSocketId).emit('messageNotification', {
+              conversationId,
+              message: populatedMessage
+            });
+          }
+        });
+      } catch (error) {
+        console.error('Error sending message:', error);
+        socket.emit('error', { message: 'Error sending message' });
+      }
+    });
+
+    // Handle typing status
+    socket.on('typing', (data) => {
+      socket.to(data.conversationId).emit('userTyping', {
+        userId: user._id,
+        username: user.username,
+        isTyping: data.isTyping,
+        conversationId: data.conversationId
+      });
+    });
+
+    // Handle mark as read
+    socket.on('markAsRead', async (data) => {
+      try {
+        await Message.updateMany(
+          {
+            _id: { $in: data.messageIds },
+            sender: { $ne: user._id }
+          },
+          {
+            $addToSet: { readBy: user._id }
+          }
+        );
+
+        io.to(data.conversationId).emit('messagesRead', {
+          conversationId: data.conversationId,
+          messageIds: data.messageIds,
+          readBy: user._id
+        });
+      } catch (error) {
+        console.error('Error marking messages as read:', error);
+        socket.emit('error', { message: 'Error marking messages as read' });
+      }
+    });
+
+    // Handle disconnection
+    socket.on('disconnect', () => {
       console.log(`User disconnected: ${user._id}`);
-      
-      // Remove from online users
       onlineUsers.delete(user._id.toString());
-      
-      // Remove subscriptions
-      clientSubscriptions.delete(ws);
-      
+
       // Broadcast offline status
-      const statusUpdate = {
-        type: 'userStatus',
-        data: {
-          userId: user._id.toString(),
-          status: 'offline'
-        }
-      };
-      
-      broadcast(statusUpdate, Array.from(onlineUsers.values()));
+      io.emit('userStatus', {
+        userId: user._id.toString(),
+        status: 'offline'
+      });
     });
 
     // Send initial connection confirmation
-    ws.send(JSON.stringify({ 
-      type: 'connected',
+    socket.emit('connected', {
       userId: user._id.toString()
-    }));
+    });
+
+    // Send initial online users list
+    const usersList = await getOnlineUsersList();
+    socket.emit('onlineUsers', usersList);
   });
 
-  console.log('WebSocket server initialized');
-  return wss;
+  console.log('Socket.IO server initialized');
+  return io;
 };
 
 module.exports = setupWebSocket;

@@ -15,11 +15,28 @@ const setupWebSocket = require('./config/socket');
 
 // Create Express app
 const app = express();
+
 const server = http.createServer(app);
 
+// CORS configuration
+const corsOptions = {
+  origin: process.env.NODE_ENV === 'production' 
+    ? process.env.FRONTEND_URL 
+    : ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+};
+
 // Middleware
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
+
+// Request logging middleware
+app.use((req, res, next) => {
+  console.log(`${req.method} ${req.url} [${new Date().toISOString()}]`);
+  next();
+});
 
 // Routes
 app.use('/api/v1/auth', authRoutes);
@@ -27,7 +44,7 @@ app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/chat', chatRoutes);
 
 // Setup WebSocket
-const wss = setupWebSocket(server);
+setupWebSocket(server);
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGODB_URI)
@@ -37,7 +54,14 @@ mongoose.connect(process.env.MONGODB_URI)
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).json({ message: 'Something went wrong!' });
+  const statusCode = err.statusCode || 500;
+  const message = err.message || 'Something went wrong!';
+  
+  res.status(statusCode).json({ 
+    status: 'error',
+    message,
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+  });
 });
 
 // Start server
